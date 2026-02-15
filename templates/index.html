@@ -1,0 +1,239 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<style>
+    /* UPLOAD BOX IMPROVEMENTS */
+.upload-container {
+    text-align: center;
+    padding-top: 20px;
+}
+
+.upload-container form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    gap: 18px;
+}
+
+.upload-container input[type="file"] {
+    width: 100%;
+    max-width: 700px;
+    height: 55px;
+    padding: 12px;
+    font-size: 16px;
+    border-radius: 10px;
+}
+
+.btn-sparq {
+    width: 90%;
+    max-width: 800px;
+    height: 55px;
+    font-size: 18px;
+    font-weight: 700;
+    border-radius: 12px;
+}
+
+
+
+
+    body {
+        background: #f6f7fb !important;
+    }
+
+    /* Main Theme Color */
+    :root {
+        --sparq-main: #30880aff;
+        --sparq-hover: #118EAD;
+    }
+
+    .hero-section {
+        text-align: center;
+        padding: 40px 20px;
+    }
+
+    .hero-title {
+        font-size: 36px;
+        font-weight: 700;
+        color: #034b16ff;
+    }
+
+    .hero-sub {
+        font-size: 17px;
+        color: #666;
+        margin-top: 8px;
+    }
+
+    .card-custom {
+        background: #ffffff;
+        border-radius: 20px;
+        padding: 35px;
+        box-shadow: 0 10px 30px rgba(0,0,0,0.08);
+        transition: 0.2s ease-in-out;
+        min-height: 420px;   /* INCREASED HEIGHT */
+    }
+
+    .card-custom:hover {
+        transform: translateY(-4px);
+        box-shadow: 0 15px 40px rgba(0,0,0,0.14);
+    }
+
+    .section-title {
+        font-size: 22px;
+        font-weight: 600;
+        color: #034b16ff;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    /* The upload card is now bigger */
+    .upload-container {
+        width: 100%;
+    }
+
+    .note-list li {
+        margin-bottom: 6px;
+        color: #044252ff;
+        font-size: 15px;
+    }
+
+    /* THEME BUTTON */
+    .btn-sparq {
+        width: 100%;
+        padding: 12px;
+        font-size: 17px;
+        border-radius: 10px;
+        background: var(--sparq-main);
+        border: none;
+        color: white;
+        font-weight: 600;
+        transition: 0.2s;
+    }
+
+    .btn-sparq:hover {
+        background: var(--sparq-hover);
+        color: white;
+    }
+
+    .upload-container {
+    text-align: center;              /* center text */
+}
+
+.upload-container form {
+    display: flex;
+    flex-direction: column;
+    align-items: center;             /* center form elements */
+}
+
+.upload-container input[type="file"],
+.upload-container button {
+    width: 80%;                      /* makes elements nicely centered */
+    max-width: 500px;                /* prevents them becoming too wide */
+}
+   
+.upload-container ul {
+    text-align: left;                /* keep bullet points aligned left */
+    margin: auto;                    /* center the UL block */
+    width: fit-content;              /* adjusts width to content */
+}
+
+</style>
+
+<!-- HERO SECTION -->
+<div class="hero-section">
+    <div class="hero-title"> AI Risk Quantifier</div>
+    <div class="hero-sub">Analyze risk instantly using AI or upload a CSV for full evaluation</div>
+</div>
+
+<div class="row g-5 justify-content-center">
+
+    <!-- LEFT: CSV UPLOAD -->
+    <div class="col-lg-7">
+    <div class="card-custom upload-container">
+
+        <div class="section-title">📁 Upload Project CSV</div>
+        <p></p>
+        <p></p>
+        <p></p>
+        
+
+        <form method="POST" action="{{ url_for('upload') }}" enctype="multipart/form-data">
+            
+            <input type="file" class="form-control" name="file">
+
+            <button class="btn-sparq">
+                Upload & Analyze
+            </button>
+        </form>
+
+    </div>
+</div>
+
+
+    <!-- RIGHT: Manual Prediction -->
+    <div class="col-lg-5">
+        <div class="card-custom">
+            <div class="section-title">⚡ Instant Manual Prediction</div>
+            <p class="text-muted small">
+                Predict risk instantly without uploading any CSV.
+            </p>
+
+            {% if not model_exists %}
+            <div class="alert alert-warning text-center">
+                No trained model found. Upload a labeled CSV to enable predictions.
+            </div>
+
+            {% else %}
+
+            {% for f in ['Duration','Team_Size','Budget','Past_Delays','Tech_Complexity'] %}
+                <label class="form-label mt-2">{{ f }}</label>
+                <input id="inp_{{ f }}" class="form-control" placeholder="Enter {{ f }}">
+            {% endfor %}
+
+            <button id="btn_manual_predict" class="btn-sparq mt-3">
+                Predict
+            </button>
+
+            <div id="manual_output" class="mt-3"></div>
+
+            {% endif %}
+        </div>
+    </div>
+
+</div>
+
+<script>
+document.getElementById("btn_manual_predict")?.addEventListener("click", async () => {
+
+    let features = ["Duration","Team_Size","Budget","Past_Delays","Tech_Complexity"];
+    let payload = {};
+
+    for (let f of features) {
+        let v = document.getElementById("inp_" + f).value;
+        payload[f] = isNaN(v) ? v : Number(v);
+    }
+
+    let res = await fetch("{{ url_for('predict_manual') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(payload)
+    });
+
+    let data = await res.json();
+    let out = document.getElementById("manual_output");
+
+    if (data.prediction) {
+        out.innerHTML = `
+            <div class='alert alert-info text-center'>
+                Predicted Risk: <strong>${data.prediction}</strong>
+            </div>`;
+    } else {
+        out.innerHTML = `
+            <div class='alert alert-danger text-center'>
+                ${data.error}
+            </div>`;
+    }
+});
+</script>
+
+{% endblock %}

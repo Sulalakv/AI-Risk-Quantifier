@@ -1,0 +1,181 @@
+{% extends "layout.html" %}
+{% block content %}
+
+<div class="row g-4">
+
+    <!-- LEFT SIDE (Charts + Table) -->
+    <div class="col-lg-8">
+
+        <!-- Summary Cards -->
+        <div class="row g-3 mb-2">
+
+            <div class="col-md-4">
+                <div class="card p-3 text-center">
+                    <h6 class="text-muted mb-1">Total Projects</h6>
+                    <h2>{{ total }}</h2>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card p-3 text-center">
+                    <h6 class="text-muted mb-1">High Risk</h6>
+                    <h2 class="text-danger">{{ high }}</h2>
+                </div>
+            </div>
+
+            <div class="col-md-4">
+                <div class="card p-3 text-center">
+                    <h6 class="text-muted mb-1">Low Risk</h6>
+                    <h2 class="text-success">{{ low }}</h2>
+                </div>
+            </div>
+        </div>
+
+        <!-- Charts -->
+        <div class="row g-3">
+
+            <div class="col-md-6">
+                <div class="card p-3">
+                    <h6 class="mb-2">Risk Distribution</h6>
+                    <div id="riskPie"></div>
+                </div>
+            </div>
+
+            <div class="col-md-6">
+                <div class="card p-3">
+                    <h6 class="mb-2">Feature Importance</h6>
+                    <div id="featureBar"></div>
+                </div>
+            </div>
+
+        </div>
+
+        <!-- Heatmap -->
+        <div class="card p-3 mt-3">
+            <h6>Correlation Heatmap</h6>
+
+            {% if heatmap_base64 %}
+                <img src="data:image/png;base64,{{ heatmap_base64 }}" class="img-fluid rounded mt-2">
+            {% else %}
+                <p class="text-muted mt-2">Heatmap unavailable (not enough numeric columns).</p>
+            {% endif %}
+        </div>
+
+        <!-- Predictions Table -->
+        <div class="card p-3 mt-3">
+            <h6>Predicted Risk (Sample)</h6>
+            <div class="table-responsive mt-2">
+                {{ table_html|safe }}
+            </div>
+        </div>
+
+    </div>
+
+    <!-- RIGHT SIDE (Manual Prediction + Actions) -->
+    <div class="col-lg-4">
+
+        <!-- Actions -->
+        <div class="card p-3 mb-3">
+            <h6>Actions</h6>
+            <a class="btn btn-success w-100 mt-2" href="{{ url_for('download', filename=download_name) }}">
+                Download Predicted CSV
+            </a>
+
+            <button id="savePdfBtn" class="btn btn-outline-primary w-100 mt-2">
+                Save Dashboard as PDF
+            </button>
+
+            <p class="text-muted small mt-2">
+                Download predictions or save dashboard as a PDF snapshot.
+            </p>
+        </div>
+
+        <!-- Manual Prediction -->
+        <div class="card p-3">
+            <h6>Manual Prediction</h6>
+            <p class="text-muted small">Predict risk instantly without uploading any CSV.</p>
+
+            {% for f in features %}
+            <div class="mb-2">
+                <label class="form-label">{{ f }}</label>
+                <input id="inp_{{ f }}" class="form-control" placeholder="Enter {{ f }}">
+            </div>
+            {% endfor %}
+
+            <button id="btn_predict" class="btn btn-primary w-100 mt-2">Predict</button>
+
+            <div id="manual_result" class="mt-3"></div>
+        </div>
+
+    </div>
+
+</div>
+
+<!-- ApexCharts Scripts -->
+<script>
+    const counts = {{ counts|tojson }};
+    const riskLabels = Object.keys(counts);
+    const riskSeries = Object.values(counts);
+
+    const fi = {{ importances|tojson }};
+    const fi_labels = fi.map(x => x[0]);
+    const fi_values = fi.map(x => x[1]);
+
+    /* Risk Distribution (Pie) */
+    new ApexCharts(document.querySelector("#riskPie"), {
+        chart: { type: "donut", height: 320 },
+        series: riskSeries,
+        labels: riskLabels,
+        colors: ["#e74c3c", "#f1c40f", "#2ecc71"],
+        legend: { position: 'bottom' }
+    }).render();
+
+    /* Feature Importance (Horizontal Bar) */
+    new ApexCharts(document.querySelector("#featureBar"), {
+        chart: { type: "bar", height: 320 },
+        plotOptions: { bar: { horizontal: true } },
+        series: [{ name: "Importance", data: fi_values }],
+        xaxis: { categories: fi_labels },
+        colors: ["#357edd"],
+        dataLabels: { enabled: false }
+    }).render();
+
+    /* Manual Prediction */
+    document.getElementById("btn_predict").addEventListener("click", async () => {
+        let payload = {};
+        let features = {{ features|tojson }};
+
+        for (let f of features) {
+            let v = document.getElementById("inp_" + f).value;
+            payload[f] = isNaN(v) ? v : Number(v);
+        }
+
+        let res = await fetch("{{ url_for('predict_manual') }}", {
+            method: "POST",
+            headers: { "Content-Type": "application/json" },
+            body: JSON.stringify(payload)
+        });
+
+        let data = await res.json();
+        let out = document.getElementById("manual_result");
+
+        if (data.prediction) {
+            out.innerHTML = `
+                <div class="alert alert-info">
+                    Predicted Risk: <strong>${data.prediction}</strong>
+                </div>`;
+        } else {
+            out.innerHTML = `
+                <div class="alert alert-danger">Error: ${data.error}</div>`;
+        }
+    });
+
+    /* Save as PDF */
+    document.getElementById("savePdfBtn").addEventListener("click", () => {
+        alert("Choose 'Save as PDF' in the print window.");
+        window.print();
+    });
+
+</script>
+
+{% endblock %}
